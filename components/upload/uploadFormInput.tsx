@@ -7,6 +7,10 @@ import { useUploadThing } from '@/utils/uploadthing';
 import { toast } from 'sonner';
 import { generatePdfsummary } from '@/actions/upload-action';
 import { Loader2 } from 'lucide-react';
+import { title } from 'process';
+import { fi } from 'zod/v4/locales';
+import { storePdfSummaryAction } from '@/actions/summary-action';
+import { useRouter } from 'next/navigation';
 
 const schema = z.object({
   file: z
@@ -26,6 +30,7 @@ const schema = z.object({
 export default function UploadFormInput() {
   const formref = useRef<HTMLFormElement>(null);
   const [isLoading, setisLoading] = useState(false);
+  const router = useRouter();
   const { startUpload, routeConfig } = useUploadThing('fileUploader', {
     onClientUploadComplete: () => {
       toast('Upload Completed');
@@ -68,7 +73,10 @@ export default function UploadFormInput() {
       console.log('Resp', resp);
 
       const summary = await generatePdfsummary(resp[0].serverData);
+      const fileName = resp[0].name;
 
+      const fileUrl = resp[0].ufsUrl;
+      const title = fileName.replace(/\.[^/.]+$/, '');
       const { success = null, message = null, data = null } = summary || {};
 
       if (data) {
@@ -76,6 +84,23 @@ export default function UploadFormInput() {
           description: 'Uploading PDF',
         });
         formref.current?.reset();
+
+        const storePdfResponse = await storePdfSummaryAction({
+          pdfSummary: data,
+          title,
+          fileName,
+          fileUrl,
+        });
+
+        if (storePdfResponse.success === false) {
+          toast.error(storePdfResponse.message || 'Error storing PDF summary');
+        } else {
+          if (storePdfResponse?.data?.id) {
+            toast.success('PDF Summary stored successfully');
+            router.push(`/summaries/${storePdfResponse.data.id}`);
+          }
+        }
+
         setisLoading(false);
       }
     } catch (error) {
